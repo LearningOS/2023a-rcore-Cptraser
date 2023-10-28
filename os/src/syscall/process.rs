@@ -1,9 +1,10 @@
 //! Process management syscalls
 use crate::{
     config::MAX_SYSCALL_NUM,
-    task::{exit_current_and_run_next, suspend_current_and_run_next, TaskStatus},
-    timer::get_time_us,
+    task::{exit_current_and_run_next, suspend_current_and_run_next, TaskStatus, TASK_MANAGER},
+    timer::{get_time_ms, get_time_us},
 };
+use alloc::{string::ToString};
 
 #[repr(C)]
 #[derive(Debug)]
@@ -22,6 +23,7 @@ pub struct TaskInfo {
     /// Total running time of task
     time: usize,
 }
+
 
 /// task exits and submit an exit code
 pub fn sys_exit(exit_code: i32) -> ! {
@@ -53,5 +55,17 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
 /// YOUR JOB: Finish sys_task_info to pass testcases
 pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
     trace!("kernel: sys_task_info");
-    -1
+    // let outputstr = "kernel: now running task ".to_string() + &TASK_MANAGER.get_current_task().to_string() + "\n";
+    // sys_write(1, outputstr.as_ptr() as *const u8, outputstr.len());
+    trace!("kernel: now running task id: {}", TASK_MANAGER.get_current_task().to_string());
+    let time = get_time_ms() - TASK_MANAGER.get_current_start_time();
+    trace!("kernel: task time from 1st use: {}ms", time);
+    unsafe {
+        *_ti = TaskInfo {
+            status: TaskStatus::Running,
+            syscall_times: TASK_MANAGER.syscall_times_clone(),
+            time,
+        }
+    }
+    0
 }
