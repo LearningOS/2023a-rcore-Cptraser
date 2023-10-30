@@ -11,6 +11,7 @@ use crate::sync::UPSafeCell;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+// use riscv::paging::Mapper;
 use core::arch::asm;
 use lazy_static::*;
 use riscv::register::satp;
@@ -62,6 +63,22 @@ impl MemorySet {
             MapArea::new(start_va, end_va, MapType::Framed, permission),
             None,
         );
+    }
+    /// Assume that no conflicts.
+    pub fn delete_frame_area (
+        &mut self,
+        start_va: VirtAddr,
+        end_va: VirtAddr,
+    ) {
+        if let Some(iter) = self.areas.iter().position(|x| {
+            x.vpn_range.get_start() == start_va.floor() && 
+                x.vpn_range.get_end() == end_va.ceil()
+        }) {
+            if let Some(y) = self.areas.get_mut(iter) {
+                y.unmap(&mut self.page_table);
+            }
+            self.areas.remove(iter);
+        }
     }
     fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>) {
         map_area.map(&mut self.page_table);
@@ -280,6 +297,7 @@ impl MapArea {
     ) -> Self {
         let start_vpn: VirtPageNum = start_va.floor();
         let end_vpn: VirtPageNum = end_va.ceil();
+        error!("start_vpn{}, end_vpn{}", usize::from(start_vpn), usize::from(end_vpn));
         Self {
             vpn_range: VPNRange::new(start_vpn, end_vpn),
             data_frames: BTreeMap::new(),
@@ -317,6 +335,7 @@ impl MapArea {
     #[allow(unused)]
     pub fn unmap(&mut self, page_table: &mut PageTable) {
         for vpn in self.vpn_range {
+            error!("~~!!!{}", usize::from(vpn));
             self.unmap_one(page_table, vpn);
         }
     }

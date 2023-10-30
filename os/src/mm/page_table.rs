@@ -1,6 +1,9 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 
+use crate::config::PAGE_SIZE;
+
 use super::{frame_alloc, FrameTracker, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
+use _core::usize;
 use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
@@ -170,4 +173,69 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
         start = end_va.into();
     }
     v
+}
+
+/// Modify content of Page Table with same of ptr and src
+pub fn modify_byte_buffer(token: usize, ptr: *const u8, len: usize, src: *const u8) {
+    let page_table = PageTable::from_token(token);
+    let mut start = ptr as usize;
+    let end = start + len;
+    while start < end {
+        let start_va = VirtAddr::from(start);
+        let mut vpn = start_va.floor();
+        let ppn = page_table.translate(vpn).unwrap().ppn();
+        vpn.step();
+        let mut end_va: VirtAddr = vpn.into();
+        end_va = end_va.min(VirtAddr::from(end));
+        if end_va.page_offset() == 0 {
+            let _v = &mut ppn.get_bytes_array()[start_va.page_offset()..];
+            let src_slice = unsafe { core::slice::from_raw_parts(src, 4096 - start_va.page_offset()) };
+            _v.copy_from_slice(src_slice);
+        } else {
+            let _v = &mut ppn.get_bytes_array()[start_va.page_offset()..end_va.page_offset()];
+            let src_slice = unsafe { core::slice::from_raw_parts(src, end_va.page_offset() - start_va.page_offset()) };
+            _v.copy_from_slice(src_slice);
+        }
+        start = end_va.into();
+    }
+}
+
+/// Check if all None map
+pub fn check_none_map(token: usize, start: usize, len: usize) -> bool {
+    let page_table = PageTable::from_token(token);
+    let v: Vec<Option<PageTableEntry>> = (start..=start+len-1)
+                                            .step_by(PAGE_SIZE)
+                                            .into_iter()
+                                            .map(|x| page_table.translate(VirtAddr::from(x).into()))
+                                            .collect();
+    v.iter().all(|x| {
+        if let Some(pte) = x {
+            if !pte.is_valid() {
+                return true;
+            } else {
+                return false;
+            }
+        }
+        return true;
+    })
+}
+
+/// Check if not exist None map
+pub fn check_exist_none_map(token: usize, start: usize, len: usize) -> bool {
+    let page_table = PageTable::from_token(token);
+    let v: Vec<Option<PageTableEntry>> = (start..=start+len-1)
+                                            .step_by(PAGE_SIZE)
+                                            .into_iter()
+                                            .map(|x| page_table.translate(VirtAddr::from(x).into()))
+                                            .collect();
+    !v.iter().any(|x| {
+        if let Some(pte) = x {
+            if !pte.is_valid() {
+                return true;
+            } else {
+                return false;
+            }
+        }
+        return true;
+    })
 }

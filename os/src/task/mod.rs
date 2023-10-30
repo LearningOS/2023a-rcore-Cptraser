@@ -14,8 +14,11 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
+use crate::config::{MAX_APP_NUM, MAX_SYSCALL_NUM};
 use crate::loader::{get_app_data, get_num_app};
+use crate::mm::{VirtAddr, MapPermission};
 use crate::sync::UPSafeCell;
+use crate::timer::get_time_ms;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
 use lazy_static::*;
@@ -46,6 +49,8 @@ struct TaskManagerInner {
     tasks: Vec<TaskControlBlock>,
     /// id of current `Running` task
     current_task: usize,
+    /// start time of task
+    start_time: [usize; MAX_APP_NUM],
 }
 
 lazy_static! {
@@ -64,6 +69,7 @@ lazy_static! {
                 UPSafeCell::new(TaskManagerInner {
                     tasks,
                     current_task: 0,
+                    start_time: [0; MAX_APP_NUM],
                 })
             },
         }
@@ -77,6 +83,7 @@ impl TaskManager {
     /// But in ch4, we load apps statically, so the first task is a real app.
     fn run_first_task(&self) -> ! {
         let mut inner = self.inner.exclusive_access();
+        inner.start_time[0] = get_time_ms();
         let next_task = &mut inner.tasks[0];
         next_task.task_status = TaskStatus::Running;
         let next_task_cx_ptr = &next_task.task_cx as *const TaskContext;
@@ -141,6 +148,9 @@ impl TaskManager {
             let current = inner.current_task;
             inner.tasks[next].task_status = TaskStatus::Running;
             inner.current_task = next;
+            if inner.start_time[current] == 0 {
+                inner.start_time[current] = get_time_ms();
+            }
             let current_task_cx_ptr = &mut inner.tasks[current].task_cx as *mut TaskContext;
             let next_task_cx_ptr = &inner.tasks[next].task_cx as *const TaskContext;
             drop(inner);
@@ -152,6 +162,56 @@ impl TaskManager {
         } else {
             panic!("All applications completed!");
         }
+    }
+    /// Get now running task
+    pub fn get_current_task(&self) -> usize {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        current
+    }
+
+    /// Get start time of task
+    pub fn get_current_start_time(&self) -> usize {
+        let inner = self.inner.exclusive_access();
+        let start_time = inner.start_time[inner.current_task];
+        start_time
+    }
+
+    /// Update syscall_times
+    pub fn update_syscall_times(&self, syscall_id: usize) {
+        let mut inner = self.inner.exclusive_access();
+        let current_task = inner.current_task;
+        inner.tasks[current_task].syscall_times[syscall_id] += 1;
+    }
+
+    /// Get now syscall_time clone
+    pub fn syscall_times_clone(&self) -> [u32; MAX_SYSCALL_NUM] {
+        let inner = self.inner.exclusive_access();
+        let current_task = inner.current_task;
+        inner.tasks[current_task].syscall_times.clone()
+    }
+
+    /// Mmap from start_va to end_va
+    pub fn pg_mmap(
+        &self, 
+        start_va: VirtAddr, 
+        end_va: VirtAddr, 
+        permission: MapPermission,
+    ) {
+        let mut inner = self.inner.exclusive_access();
+        let current_task = inner.current_task;
+        inner.tasks[current_task].memory_set.insert_framed_area(start_va, end_va, permission);
+    }
+
+    /// Munmap from start_va to end_va
+    pub fn pg_munmap(
+        &self, 
+        start_va: VirtAddr, 
+        end_va: VirtAddr,
+    ) {
+        let mut inner = self.inner.exclusive_access();
+        let current_task = inner.current_task;
+        inner.tasks[current_task].memory_set.delete_frame_area(start_va, end_va);
     }
 }
 
