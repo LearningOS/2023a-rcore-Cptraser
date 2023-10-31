@@ -58,6 +58,7 @@ impl TaskControlBlock {
             kernel_stack_top.into(),
             MapPermission::R | MapPermission::W,
         );
+        // begin and use trap_return
         let task_control_block = Self {
             syscall_times: [0; MAX_SYSCALL_NUM],
             task_status,
