@@ -1,14 +1,11 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
-<<<<<<< HEAD
 use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use alloc::string::String;
-=======
 
 use crate::config::PAGE_SIZE;
 
 use super::{frame_alloc, FrameTracker, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use _core::usize;
->>>>>>> ed227bb (1)
 use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
