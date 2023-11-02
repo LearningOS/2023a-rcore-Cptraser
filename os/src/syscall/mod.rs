@@ -46,10 +46,11 @@ mod process;
 use fs::*;
 use process::*;
 
-use crate::task::TASK_MANAGER;
+use crate::task::TaskControlBlock;
+
 /// handle syscall exception with `syscall_id` and other arguments
 pub fn syscall(syscall_id: usize, args: [usize; 3]) -> isize {
-    TASK_MANAGER.update_syscall_times(syscall_id);
+    TaskControlBlock::update_syscall_times(syscall_id);
     match syscall_id {
         SYSCALL_READ => sys_read(args[0], args[1] as *const u8, args[2]),
         SYSCALL_WRITE => sys_write(args[0], args[1] as *const u8, args[2]),

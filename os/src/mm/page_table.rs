@@ -3,8 +3,6 @@ use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAdd
 use alloc::string::String;
 
 use crate::config::PAGE_SIZE;
-
-use super::{frame_alloc, FrameTracker, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use _core::usize;
 use alloc::vec;
 use alloc::vec::Vec;

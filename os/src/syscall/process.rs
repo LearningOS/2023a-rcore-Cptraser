@@ -3,19 +3,17 @@ use alloc::sync::Arc;
 
 use core::mem::size_of;
 
-use alloc::string::ToString;
 
 use crate::mm::{modify_byte_buffer, VirtAddr, check_none_map, MapPermission, check_exist_none_map};
-// use crate::mm::{modify_byte_buffer};
-use crate::task::{current_user_token, TASK_MANAGER};
+use crate::task::{current_user_token, current_syscall_times, current_start_time};
 
-use crate::timer::get_time_ms;
+use crate::timer::{get_time_ms, get_time_us};
 use crate::{
     config::MAX_SYSCALL_NUM,
     loader::get_app_data_by_name,
     mm::{translated_refmut, translated_str},
     task::{
-        add_task, current_task, current_user_token, exit_current_and_run_next,
+        add_task, current_task, exit_current_and_run_next,
         suspend_current_and_run_next, TaskStatus,
     },
 };
@@ -110,6 +108,7 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
     if let Some((idx, _)) = pair {
         let child = inner.children.remove(idx);
         // confirm that child will be deallocated after being removed from children list
+        trace!("child pid {}", child.getpid());
         assert_eq!(Arc::strong_count(&child), 1);
         let found_pid = child.getpid();
         // ++++ temporarily access child PCB exclusively
@@ -150,12 +149,11 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
         "kernel:pid[{}] sys_task_info",
         current_task().unwrap().pid.0
     );
-    trace!("kernel: now running task id: {}", TASK_MANAGER.get_current_task().to_string());
-    let time = get_time_ms() - TASK_MANAGER.get_current_start_time();
+    let time = get_time_ms() - current_start_time();
     trace!("kernel: task time from 1st use: {}ms", time);
     let __ti = TaskInfo {
         status: TaskStatus::Running,
-        syscall_times: TASK_MANAGER.syscall_times_clone(),
+        syscall_times: current_syscall_times(),
         time,
     };
     let _pti: *const TaskInfo = &__ti;
@@ -183,8 +181,8 @@ pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
         error!("sys_mmap start to end pa exist map!");
         return -1;
     }
-    error!("------");
-    TASK_MANAGER.pg_mmap(VirtAddr::from(_start), VirtAddr::from(_start+_len), MapPermission::from_bits_truncate((_port as u8) << 1) | MapPermission::U);
+    let current_task = current_task().unwrap();
+    current_task.pg_mmap(VirtAddr::from(_start), VirtAddr::from(_start+_len), MapPermission::from_bits_truncate((_port as u8) << 1) | MapPermission::U);
     0
 }
 
@@ -201,7 +199,8 @@ pub fn sys_munmap(_start: usize, _len: usize) -> isize {
         error!("sys_munmap start to end pa exist None map!");
         return -1;
     }
-    TASK_MANAGER.pg_munmap(VirtAddr::from(_start), VirtAddr::from(_start+_len));
+    let current_task = current_task().unwrap();
+    current_task.pg_munmap(VirtAddr::from(_start), VirtAddr::from(_start+_len));
     0
 }
 
@@ -219,17 +218,36 @@ pub fn sys_sbrk(size: i32) -> isize {
 /// HINT: fork + exec =/= spawn
 pub fn sys_spawn(_path: *const u8) -> isize {
     trace!(
-        "kernel:pid[{}] sys_spawn NOT IMPLEMENTED",
+        "kernel:pid[{}] sys_spawn",
         current_task().unwrap().pid.0
     );
-    -1
+    let token = current_user_token();
+    let path = translated_str(token, _path);
+    if let Some(elf_data) = get_app_data_by_name(path.as_str()) {
+        let current_task = current_task().unwrap();
+        let spawn_task = current_task.spawn(elf_data);
+        let spawn_id = spawn_task.pid.0 as isize;
+        trace!(
+            "kernel:pid[{}] spawn",
+            spawn_id
+        );
+        add_task(spawn_task);
+        spawn_id
+    } else {
+        -1
+    }
 }
 
 // YOUR JOB: Set task priority.
 pub fn sys_set_priority(_prio: isize) -> isize {
     trace!(
-        "kernel:pid[{}] sys_set_priority NOT IMPLEMENTED",
+        "kernel:pid[{}] sys_set_priority",
         current_task().unwrap().pid.0
     );
-    -1
+    if _prio <= 1 {
+        return -1;
+    }
+    let current_task = current_task().unwrap();
+    current_task.set_current_priority(_prio as usize);
+    current_task.get_priority_number() as isize
 }

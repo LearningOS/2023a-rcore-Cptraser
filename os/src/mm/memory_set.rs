@@ -335,7 +335,6 @@ impl MapArea {
     ) -> Self {
         let start_vpn: VirtPageNum = start_va.floor();
         let end_vpn: VirtPageNum = end_va.ceil();
-        error!("start_vpn{}, end_vpn{}", usize::from(start_vpn), usize::from(end_vpn));
         Self {
             vpn_range: VPNRange::new(start_vpn, end_vpn),
             data_frames: BTreeMap::new(),
