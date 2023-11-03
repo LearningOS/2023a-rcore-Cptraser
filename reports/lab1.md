@@ -14,8 +14,11 @@ sys_task_info调用的实现建立在对TaskManager的修改的基础上。
 
 ## 简答题
 
-1. 
-
+1. RustSBI version 0.3.0-alpha.2, adapting to RISC-V SBI v1.0.0
+    1. ch2_bad_address.rs: [kernel] PageFault in application, bad_addr = 0x0, bad instruction = 0x8004003c4, kernel killed it. 由于程序试图访问受保护的地址触发 kill。
+    2. ch2b_bad_instructions.rs: IlleaglInstruction in application, kernel killed it. 由于用户程序试图使用特权指令触发报错后被kill。
+    3. ch2b_bad_register.rs: IlleaglInstruction in application, kernel killed it. 由于用户程序试图使用特权寄存器被kill。
+    
 2. 
     1. a0存储了内核栈的地址，两种情景为：处理完trap后从S态回到U态时; 当批处理操作系统初始化完成，或者是某个应用程序运行结束或出错的时通过__restore函数回到用户态。
     2. 将三个寄存器信息从内核栈中取出。
